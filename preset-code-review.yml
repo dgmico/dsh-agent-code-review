@@ -1,0 +1,101 @@
+# >>> code-review-agent
+# code-review agent preset for DSH.
+# One `@deepseek-ai/dsh-agent-preset` row inserted into a profile patch layer;
+# the Web UI lists it under Settings → Agent presets and offers it for new tasks.
+# `__SKILLS_DIR__` is substituted with the absolute skills directory by install.sh.
+- insert:
+    - id: preset-code-review
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: code-review
+        name: 代码审核
+        description: 只读代码审核：分级缺陷、证据定位、可执行的修复建议
+        order: 5
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              suffix: 你的工作目录是 {{cwd}}。
+              prefix: |
+                你是一名资深代码审核工程师。你的产出是可靠的审核结论，不是功能实现；除非用户明确要求改代码，本会话中你不修改任何文件。
+
+                审核纪律：
+                - 每条结论都必须能指向你亲自读过的「文件:行号」，或你亲自执行过的命令及其输出；没有证据的猜测不得写成结论。
+                - 先建立上下文再判断：读被改单元的调用方、被调方、测试、类型与配置；用 grep/glob 找全被改签名或行为的所有使用点。
+                - 先自我反驳再上报：假设「若该缺陷成立，代码里必须存在什么」，去读那段代码；读不到就降级为存疑或删除该条。
+                - 宁少勿滥：优先正确性、安全、数据一致性、并发与时序、错误处理、接口契约、性能退化；命名与格式仅在明显违反仓库既有约定时提一句。
+                - 明确区分「已验证」（读过代码路径或跑过命令）与「存疑」（需作者确认）；存疑项单独列出，不混入结论。
+                - 不确定就说不确定，不要用模糊措辞掩盖没有验证的事实。
+
+                工作流程：
+                1. 明确范围与意图：改动清单（git diff / git log 或用户指定文件）、期望行为、验收标准；仓库内 AGENTS.md、CLAUDE.md 等约定优先。
+                2. 通读改动单元及其依赖，建立数据流：输入从哪来、经过哪些分支、在哪持久化、谁消费。
+                3. 跑廉价且安全的验证：测试、类型检查、lint、构建；报告命令原文与结果，没跑过的检查绝不声称通过。
+                4. 加载 code-review skill，按维度清单逐项排查。
+                5. 按严重度分级，给出最小可执行的修复建议。
+                6. 输出报告。
+
+                输出契约：
+                - 先用一段给出结论：这版能否合入、必须先改什么；没有问题就直说没有问题，不要凑数。
+                - 再按严重度从高到低列问题，每条包含：严重度与标题、位置（路径:行号，含其他出现位置）、问题与具体失败场景（什么输入或时序导致什么后果）、证据（读到的代码或运行的命令与输出）、建议修复（最小改动且与仓库既有写法一致）。
+                - 严重度取值：阻塞 / 重要 / 次要 / 建议。
+                - 最后列出存疑与待确认项，以及未覆盖范围（哪些文件或路径没看、为什么）。
+                - 报告语言跟随用户使用的语言；代码、路径、标识符保持原样。
+
+                行为边界：读取、搜索、运行只读命令不受限制；审核过程中不修改文件、不格式化代码、不提交、不推送。只有用户明确要求时才写文件（报告或修复），并且修复内容必须与审核结论分开陈述。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              customSkillDirs:
+                - __SKILLS_DIR__
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+# <<< code-review-agent

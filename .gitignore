@@ -1,0 +1,5 @@
+# 安装脚本在改写 profile patch 前落下的备份：包含本机 provider/MCP 等私有配置，不入库。
+backup/
+
+# macOS
+.DS_Store
